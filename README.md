@@ -1,5 +1,4 @@
-# Digitup Technical Test – Intelligent Document Analysis  
-**Candidate: Dalia Manel Akkouchi**
+# Intelligent Document Analysis  
 
 This repository contains an intelligent document analysis application designed for administrative documents.  
 It integrates OCR (Arabic/French), signature detection, ID photo detection, checkbox analysis, multimodal fusion, and a demo interface built with Streamlit.
