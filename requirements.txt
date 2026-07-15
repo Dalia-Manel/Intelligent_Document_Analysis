@@ -1,7 +1,9 @@
+streamlit
 opencv-python
 numpy
 easyocr
 Pillow
+pdf2image
 scikit-image
 python-bidi
 arabic-reshaper

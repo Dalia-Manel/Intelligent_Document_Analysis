@@ -62,7 +62,7 @@ def check_signature_presence(image, signature_zones):
         # Seuil simple : si assez d'encre, on considère qu'il y a signature
         presence = ink_ratio > 0.005
 
-        return presence
+        return bool(presence)
 
     except Exception:
         return False

@@ -100,15 +100,25 @@ def annotate_image(image, signature_zones, photo_zone, checkboxes):
         draw.rectangle([x, y, x+w, y+h], outline="blue", width=3)
         draw.text((x, y-20), "Photo", fill="blue")
     
-    # Annoter les cases cochées en vert (cochées) ou orange (non cochées)
+    # Annoter les cases : vert si cochée, orange sinon
+    # (detect_checkboxes renvoie des dicts {"box":(x,y,w,h),"checked":bool,...})
     if checkboxes:
-        for i, checkbox in enumerate(checkboxes):
-            if len(checkbox) >= 5:
-                x, y, w, h, checked = checkbox[:5]
-                color = "green" if checked else "orange"
-                draw.rectangle([x, y, x+w, y+h], outline=color, width=2)
-                label = f"Case {i+1}: {'✓' if checked else '☐'}"
-                draw.text((x, y-20), label, fill=color)
+        for i, cb in enumerate(checkboxes):
+            if isinstance(cb, dict):
+                box = cb.get("box")
+                checked = cb.get("checked", False)
+            elif len(cb) >= 5:
+                box = cb[:4]
+                checked = cb[4]
+            else:
+                continue
+            if not box or len(box) < 4:
+                continue
+            x, y, w, h = box[:4]
+            color = "green" if checked else "orange"
+            draw.rectangle([x, y, x+w, y+h], outline=color, width=2)
+            label = f"Case {i+1}: {'✓' if checked else '☐'}"
+            draw.text((x, y-20), label, fill=color)
     
     return annotated
 
@@ -125,6 +135,7 @@ def analyze_document(image):
     """
     results = {
         "text": None,
+        "ocr_confidence": 0.0,
         "signature_zones": [],
         "signature_present": False,
         "photo_detected": False,
@@ -135,13 +146,16 @@ def analyze_document(image):
         "errors": []
     }
     
-    # Convertir l'image PIL en format compatible (numpy array)
-    img_array = np.array(image)
+    # Convertir l'image PIL (RGB) en tableau BGR pour OpenCV
+    # (image.convert("RGB") évite les plantages sur les PNG avec canal alpha)
+    img_array = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
     
     try:
-        # 1. Extraction du texte OCR
+        # 1. Extraction du texte OCR (extract_text retourne (texte, confiance))
         st.info("🔍 Extraction du texte...")
-        results["text"] = extract_text(img_array)
+        ocr_text, ocr_conf = extract_text(img_array)
+        results["text"] = ocr_text
+        results["ocr_confidence"] = ocr_conf
     except Exception as e:
         results["errors"].append(f"Erreur OCR : {str(e)}")
     
@@ -160,8 +174,14 @@ def analyze_document(image):
         if isinstance(photo_result, dict):
             results["photo_detected"] = photo_result.get("detected", False)
             results["photo_zone"] = photo_result.get("zone", None)
+        elif isinstance(photo_result, (tuple, list)) and len(photo_result) == 2:
+            # detect_photo retourne (bool, zone) ; on désempaquette proprement
+            detected, zone = photo_result
+            results["photo_detected"] = bool(detected)
+            if detected and zone is not None:
+                results["photo_zone"] = tuple(int(v) for v in zone)
         else:
-            results["photo_detected"] = photo_result
+            results["photo_detected"] = bool(photo_result)
     except Exception as e:
         results["errors"].append(f"Erreur détection photo : {str(e)}")
     
@@ -175,12 +195,15 @@ def analyze_document(image):
     try:
         # 5. Fusion des résultats et calcul du score global
         st.info(" Fusion des résultats...")
-        fusion_result = fuse_results(results)
-        if isinstance(fusion_result, dict):
-            results["global_score"] = fusion_result.get("score", None)
-            results["anomalies"] = fusion_result.get("anomalies", [])
-        else:
-            results["global_score"] = fusion_result
+        fusion_result = fuse_results(
+            ocr_text=results["text"] or "",
+            ocr_conf=results["ocr_confidence"],
+            signature_present=results["signature_present"],
+            photo_found=results["photo_detected"],
+            checkboxes=results["checkboxes"],
+        )
+        results["global_score"] = fusion_result.get("score")
+        results["anomalies"] = fusion_result.get("anomalies", [])
     except Exception as e:
         results["errors"].append(f"Erreur fusion : {str(e)}")
     
@@ -263,7 +286,7 @@ def display_results(results, annotated_image):
         st.write("**Cases cochées détectées :**")
         if results["checkboxes"]:
             st.write(f"Nombre de cases trouvées : {len(results['checkboxes'])}")
-            checked_count = sum(1 for cb in results["checkboxes"] if len(cb) >= 5 and cb[4])
+            checked_count = sum(1 for cb in results["checkboxes"] if (cb.get("checked", False) if isinstance(cb, dict) else (len(cb) >= 5 and cb[4])))
             st.write(f"Cases cochées : {checked_count}/{len(results['checkboxes'])}")
             
             for i, checkbox in enumerate(results["checkboxes"]):
@@ -323,7 +346,7 @@ def generate_report(results, filename):
     report += f"\n• Longueur du texte extrait : {len(results['text']) if results['text'] else 0} caractères"
     
     if results["checkboxes"]:
-        checked = sum(1 for cb in results["checkboxes"] if len(cb) >= 5 and cb[4])
+        checked = sum(1 for cb in results["checkboxes"] if (cb.get("checked", False) if isinstance(cb, dict) else (len(cb) >= 5 and cb[4])))
         report += f"\n• Cases cochées : {checked}/{len(results['checkboxes'])}"
     
     return report

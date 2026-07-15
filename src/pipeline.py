@@ -1,51 +1,51 @@
 # pipeline.py
-
+# Pipeline de traitement en ligne de commande (alternative à l'interface Streamlit).
+import os
+import sys
 import cv2
 
+# Rendre les modules du dossier app/ importables depuis src/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
+
 from ocr import extract_text
-from signature import check_signature_presence
+from signature import detect_signature_zone, check_signature_presence
 from fusion import fuse_results
 
-# Modules optionnels (si tu les ajoutes plus tard)
+# Modules optionnels (fallback si absents)
 try:
-    from photo import detect_photo
-except:
+    from face_detector import detect_photo
+except Exception:
     def detect_photo(image):
-        return False
+        return False, None
 
 try:
     from checkbox import detect_checkboxes
-except:
+except Exception:
     def detect_checkboxes(image):
         return []
-        
+
 
 def run_full_pipeline(image_path):
     """
-    Run all processing steps:
-    - Load image
-    - OCR extraction
-    - Signature detection
-    - Photo detection
-    - Checkbox detection
-    - Fusion of results
+    Exécute toutes les étapes de traitement :
+    chargement image → OCR → signature → photo → cases → fusion.
     """
-
-    # 1. Load image
+    # 1. Chargement de l'image
     image = cv2.imread(image_path)
     if image is None:
-        raise ValueError(f"Impossible de lire l’image : {image_path}")
+        raise ValueError(f"Impossible de lire l'image : {image_path}")
 
-    # 2. OCR extraction
+    # 2. OCR (retourne texte + confiance)
     ocr_text, ocr_conf = extract_text(image)
 
-    # 3. Signature detection
-    signature_present, signature_score = check_signature_presence(image)
+    # 3. Signature (détecter la zone puis vérifier la présence)
+    signature_zones = detect_signature_zone(image)
+    signature_present = check_signature_presence(image, signature_zones)
 
-    # 4. Photo detection (fallback = False)
-    photo_found = detect_photo(image)
+    # 4. Photo d'identité (retourne (bool, zone))
+    photo_found, _photo_zone = detect_photo(image)
 
-    # 5. Checkbox detection (fallback = [])
+    # 5. Cases à cocher
     checkboxes = detect_checkboxes(image)
 
     # 6. Fusion finale
@@ -53,15 +53,14 @@ def run_full_pipeline(image_path):
         ocr_text=ocr_text,
         ocr_conf=ocr_conf,
         signature_present=signature_present,
-        signature_score=signature_score,
         photo_found=photo_found,
-        checkboxes=checkboxes
+        checkboxes=checkboxes,
     )
 
     return result
 
 
 if __name__ == "__main__":
-    test_image = "test.jpg"  # à remplacer
+    test_image = sys.argv[1] if len(sys.argv) > 1 else "test.jpg"
     res = run_full_pipeline(test_image)
     print(res)

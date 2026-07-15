@@ -78,18 +78,22 @@ digitup-test-manel/
 
 ---
 
-##  Installation
-```
-### Clone the repository
-bash
-git clone https://github.com/yourusername/digitup-test-manel.git
+## Installation
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/Dalia-Manel/digitup-test-manel.git
 cd digitup-test-manel
 ```
 
- Install dependencies
-```
+### 2. Install dependencies
+```bash
 pip install -r requirements.txt
 ```
+
+> **Note:** PDF support relies on **Poppler** (used by `pdf2image`).
+> - Ubuntu/Debian: `sudo apt-get install poppler-utils`
+> - Windows: download Poppler and add its `bin/` folder to the PATH.
 
 (Optional) Install PyTorch if GPU is available:
 ```
